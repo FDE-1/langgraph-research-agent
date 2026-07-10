@@ -1,5 +1,11 @@
 # LangGraph Research Agent
 
+[![CI](https://github.com/FDE-1/langgraph-research-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/FDE-1/langgraph-research-agent/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Checked with mypy](https://img.shields.io/badge/mypy-strict-2a6db2.svg)](https://mypy-lang.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A **ReAct-style research agent** built on [LangGraph](https://github.com/langchain-ai/langgraph) and the OpenAI Responses API. It reasons in a loop, calls tools when needed (web search, Wikipedia, calculator, file saving, memory search), and persists both conversation state (SQLite checkpoints) and long-term memory (ChromaDB vector store).
 
 ---
@@ -99,7 +105,6 @@ langgraph-research-agent/
 │   └── utils/
 │       ├── state.py            # AgentState TypedDict
 │       ├── setting.py          # env-backed config (paths, keys, collection name)
-│       ├── errors.py           # AgentError
 │       └── logger.py           # loguru logger
 ├── tests/                      # pytest suite
 ├── scripts/                    # clean / dist / template scaffolding helpers
