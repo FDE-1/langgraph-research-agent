@@ -1,0 +1,45 @@
+# Standalone config: this project is the repo root once `init.sh` has run.
+# No `files:` scoping — a path filter like `^project/<name>/` matches nothing here
+# and silently turns every hook into a no-op.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  # Keep in lockstep with the ruff pinned in pyproject's dev group: two ruff versions
+  # disagree on import grouping and rewrite each other's output forever.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        args: [--strict]
+        additional_dependencies:
+          [beartype, pytest, pytest-mock, pydantic, pydantic-settings, loguru]
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [src/, tests/]
