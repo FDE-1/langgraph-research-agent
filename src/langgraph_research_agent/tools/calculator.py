@@ -3,6 +3,7 @@ from langchain_core.tools import StructuredTool, ToolException
 
 from ..utils.logger import logger
 
+
 def calculator_func(a: str) -> int | float | bool | str:
     """Use the given expression and calculate the expression.
     Use if you have an expression you need to calculate. Do not use
@@ -15,7 +16,9 @@ def calculator_func(a: str) -> int | float | bool | str:
     except ZeroDivisionError:
         raise ToolException("Math Error: You cannot divide by zero.")
     except TypeError:
-        raise ToolException("Type Error: Invalid operation between different types (e.g., adding text to a number).")
+        raise ToolException(
+            "Type Error: Invalid operation between different types (e.g., adding text to a number)."
+        )
     except ValueError:
         raise ToolException("Value Error: Invalid value passed to a function or math operation.")
     except SyntaxError:
@@ -26,9 +29,6 @@ def calculator_func(a: str) -> int | float | bool | str:
         raise ToolException(f"An unexpected error occurred: {e}")
 
 
-
 calculator = StructuredTool.from_function(
-    func=calculator_func,
-    name="calculator",
-    handle_tool_error=True
+    func=calculator_func, name="calculator", handle_tool_error=True
 )
