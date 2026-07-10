@@ -1,14 +1,31 @@
+import sqlite3
 import uuid
+from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Protocol
 from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
+from langgraph.checkpoint.sqlite import SqliteSaver
 from pytest import MonkeyPatch
 
-from langgraph_research_agent.agent import Agent
+from langgraph_research_agent.agent import Agent, prompt
 from langgraph_research_agent.utils.state import AgentState
+
+
+class MakeAgent(Protocol):
+    """Callable[..., Agent] would smuggle in an implicit Any, which strict mypy rejects."""
+
+    def __call__(
+        self,
+        system: str = ...,
+        funcs: list[BaseTool] | None = ...,
+        max_turn: int = ...,
+    ) -> Agent: ...
+
 
 fake_text = SimpleNamespace(type="response.output_text.delta", delta="Bonjour")
 fake_done = SimpleNamespace(type="response.completed")
@@ -23,15 +40,43 @@ def dummy_weather(query: str) -> str:
     return f"Météo pour {query}: Ensoleillé"
 
 
-@pytest.fixture(autouse=True)
-def mock_chroma(monkeypatch: MonkeyPatch) -> MagicMock:
-    mock_add = MagicMock()
-    monkeypatch.setattr("langgraph_research_agent.agent.memory_collection.add", mock_add)
-    return mock_add
+@pytest.fixture
+def mock_chroma() -> MagicMock:
+    """Stands in for the Chroma collection; `.add` is what the embed node calls."""
+    return MagicMock()
 
 
-def test_agent_initialization() -> None:
-    agent = Agent(system="Tu es un assistant", funcs=[dummy_weather])
+@pytest.fixture
+def checkpointer(tmp_path: Path) -> Iterator[SqliteSaver]:
+    """A real SqliteSaver, but on a per-test database instead of the repo root."""
+    conn = sqlite3.connect(tmp_path / "checkpoint.sqlite", check_same_thread=False)
+    try:
+        yield SqliteSaver(conn)
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def make_agent(mock_chroma: MagicMock, checkpointer: SqliteSaver) -> MakeAgent:
+    """Builds Agents with every external resource injected — no disk, no network, no key."""
+
+    def _make(
+        system: str = prompt, funcs: list[BaseTool] | None = None, max_turn: int = 5
+    ) -> Agent:
+        return Agent(
+            system=system,
+            funcs=funcs,
+            max_turn=max_turn,
+            client=MagicMock(),
+            memory_collection=mock_chroma,
+            checkpointer=checkpointer,
+        )
+
+    return _make
+
+
+def test_agent_initialization(make_agent: MakeAgent) -> None:
+    agent = make_agent(system="Tu es un assistant", funcs=[dummy_weather])
 
     assert agent.graph
     assert agent.system == "Tu es un assistant"
@@ -40,8 +85,8 @@ def test_agent_initialization() -> None:
     assert "function" not in agent.tools[0]
 
 
-def test_agent_run(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
-    agent = Agent(funcs=[dummy_weather])
+def test_agent_run(monkeypatch: MonkeyPatch, make_agent: MakeAgent, mock_chroma: MagicMock) -> None:
+    agent = make_agent(funcs=[dummy_weather])
 
     def fake_execute(state: AgentState) -> list[SimpleNamespace]:
         return [fake_text, fake_item_done, fake_done]
@@ -58,8 +103,8 @@ def test_agent_run(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
 
     assert final_state["messages"][-1]["content"] == "Bonjour"
 
-    mock_chroma.assert_called_once()
-    kwargs = mock_chroma.call_args.kwargs
+    mock_chroma.add.assert_called_once()
+    kwargs = mock_chroma.add.call_args.kwargs
     assert kwargs["documents"] == ["Bonjour"]
     assert kwargs["metadatas"][0]["user_query"] == "Salut"
 
@@ -75,8 +120,10 @@ fake_tool_call = SimpleNamespace(
 )
 
 
-def test_agent_run2(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
-    agent = Agent(funcs=[dummy_weather])
+def test_agent_run2(
+    monkeypatch: MonkeyPatch, make_agent: MakeAgent, mock_chroma: MagicMock
+) -> None:
+    agent = make_agent(funcs=[dummy_weather])
     stream_tour1 = [fake_tool_call, fake_done]
     stream_tour2 = [fake_text, fake_item_done, fake_done]
     fake = MagicMock(side_effect=[stream_tour1, stream_tour2])
@@ -96,12 +143,14 @@ def test_agent_run2(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
         for m in final_state["messages"]
     )
 
-    mock_chroma.assert_called_once()
-    assert mock_chroma.call_args.kwargs["documents"] == ["Bonjour"]
+    mock_chroma.add.assert_called_once()
+    assert mock_chroma.add.call_args.kwargs["documents"] == ["Bonjour"]
 
 
-def test_agent_run3(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
-    agent = Agent(funcs=[dummy_weather])
+def test_agent_run3(
+    monkeypatch: MonkeyPatch, make_agent: MakeAgent, mock_chroma: MagicMock
+) -> None:
+    agent = make_agent(funcs=[dummy_weather])
     stream_tour1 = [fake_text, fake_item_done, fake_done]
     stream_tour2 = [fake_text, fake_item_done, fake_done]
     fake = MagicMock(side_effect=[stream_tour1, stream_tour2])
@@ -118,4 +167,4 @@ def test_agent_run3(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
     assert "Salut" in contents
     assert "Ca va?" in contents
 
-    assert mock_chroma.call_count == 2
+    assert mock_chroma.add.call_count == 2

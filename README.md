@@ -128,14 +128,16 @@ Copy `.env.example` to `.env` and fill in the values:
 ```dotenv
 OPENAI_API_KEY=sk-...        # required — model + embeddings
 TAVILY_API_KEY=tvly-...      # required for web_search
-collection_name=agent_memory # optional — ChromaDB collection (default: agent_memory)
-client_path=workspace/chroma # optional — ChromaDB path (default: workspace/chroma)
-workspace=workspace          # optional — save_file target dir (default: workspace)
+collection_name=agent_memory     # optional — ChromaDB collection (default: agent_memory)
+client_path=workspace/chroma     # optional — ChromaDB path (default: workspace/chroma)
+workspace=workspace              # optional — save_file target dir (default: workspace)
+checkpoint_path=checkpoint.sqlite # optional — LangGraph checkpoint DB
+debug=false                      # optional — see Debugging below
 ```
 
-> `OPENAI_API_KEY` must be present (non-empty) even for tests, because the ChromaDB embedding function is built at import time. [tests/conftest.py](tests/conftest.py) sets a dummy value.
+Settings are a `pydantic-settings` `BaseSettings` model in [utils/setting.py](src/langgraph_research_agent/utils/setting.py), reached through the cached `get_settings()`.
 
-> `checkpoint.sqlite` is opened relative to the current working directory, so run the agent from the repo root.
+> Importing the package has **no side effects**. The Chroma collection, the SQLite checkpointer and the OpenAI client are built in `Agent.__init__`, so no API key is needed to import, and nothing is written to the current working directory. Each resource can also be injected — `Agent(client=..., memory_collection=..., checkpointer=...)` — which is how the test suite runs without a key or a network. [tests/test_import_side_effects.py](tests/test_import_side_effects.py) enforces this.
 
 ---
 
@@ -158,6 +160,21 @@ print(agent.run("What is 12 * (3 + 4)?", thread_id=1))
 ```
 
 Reusing the same `thread_id` resumes the conversation from its SQLite checkpoint; the system prompt is only sent on the first turn of a thread.
+
+`Agent.draw()` prints the compiled graph as a mermaid diagram.
+
+---
+
+## Debugging
+
+Set `debug=true` in `.env`. The logger switches from the JSON sink at `INFO` to a colourised human-readable sink at `DEBUG`, and every node logs its values — incoming state, tool arguments and return values, turn transitions, and the document written to memory:
+
+```
+DEBUG | agent:_action  - [action] invoking calculator with args={'a': '6*7'}
+DEBUG | agent:_action  - [action] calculator returned 42
+DEBUG | agent:_observe - [observe] turn 0 -> 1 (max_turn=5)
+DEBUG | agent:_embed   - [embed] doc_id=a311d599… user_query='what is 6*7?' document='42'
+```
 
 ---
 

@@ -21,6 +21,7 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
     client_path: str = "workspace/chroma"
     collection_name: str = "agent_memory"
     workspace: Path = Path("workspace")
+    checkpoint_path: Path = Path("checkpoint.sqlite")
 
     @field_validator("workspace")
     @classmethod

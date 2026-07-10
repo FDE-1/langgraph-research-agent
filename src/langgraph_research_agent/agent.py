@@ -5,6 +5,7 @@ import uuid
 from typing import cast
 
 import chromadb
+from chromadb.api.models.Collection import Collection
 from chromadb.utils import embedding_functions
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
@@ -20,27 +21,8 @@ from openai.types.responses import (
 from ratelimit import limits
 
 from .utils.logger import logger
-from .utils.setting import get_settings
+from .utils.setting import Settings, get_settings
 from .utils.state import AgentState
-
-settings = get_settings()
-
-chroma_client = chromadb.PersistentClient(path=settings.client_path)
-
-if settings.openai_api_key:
-    os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
-
-openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-    api_key_env_var="OPENAI_API_KEY", model_name="text-embedding-3-small"
-)
-
-memory_collection = chroma_client.get_or_create_collection(
-    name=settings.collection_name,
-    embedding_function=openai_ef,  # type: ignore[arg-type]  # chroma's own EF, stub generic mismatch
-)
-conn = sqlite3.connect("checkpoint.sqlite", check_same_thread=False)
-
-client = OpenAI(api_key=settings.openai_api_key)
 
 prompt = """ Tu es un assistant qui répond aux questions.\n
 Tu as accès à des outils, utilise-les quand c'est pertinent.\n
@@ -48,17 +30,58 @@ N'invente jamais une info que tu peux vérifier avec un outil.\n
 Si une recherche échoue, reformule plutôt que d'abandonner"""
 
 
+def build_memory_collection(settings: Settings) -> Collection:
+    """Open the Chroma store and return the memory collection."""
+    if settings.openai_api_key:
+        os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
+
+    openai_ef = embedding_functions.OpenAIEmbeddingFunction(
+        api_key_env_var="OPENAI_API_KEY", model_name="text-embedding-3-small"
+    )
+    chroma_client = chromadb.PersistentClient(path=settings.client_path)
+    return chroma_client.get_or_create_collection(
+        name=settings.collection_name,
+        embedding_function=openai_ef,  # type: ignore[arg-type]
+    )
+
+
+def build_checkpointer(settings: Settings) -> SqliteSaver:
+    """Open the checkpoint database at the configured path."""
+    conn = sqlite3.connect(settings.checkpoint_path, check_same_thread=False)
+    return SqliteSaver(conn)
+
+
+def build_openai_client(settings: Settings) -> OpenAI:
+    """Build the OpenAI client."""
+    return OpenAI(api_key=settings.openai_api_key)
+
+
 class Agent:
     def __init__(
-        self, system: str = prompt, funcs: list[BaseTool] | None = None, max_turn: int = 5
+        self,
+        system: str = prompt,
+        funcs: list[BaseTool] | None = None,
+        max_turn: int = 5,
+        *,
+        settings: Settings | None = None,
+        client: OpenAI | None = None,
+        memory_collection: Collection | None = None,
+        checkpointer: SqliteSaver | None = None,
     ) -> None:
-        """Initialize the agent"""
+        """Initialize the agent."""
         self.system = system
         self.max_turn = max_turn
+        self.settings = settings or get_settings()
+        self.client = client or build_openai_client(self.settings)
+        self.memory_collection = (
+            memory_collection
+            if memory_collection is not None
+            else build_memory_collection(self.settings)
+        )
+        self.checkpointer = checkpointer or build_checkpointer(self.settings)
         funcs = funcs or []
         self.tools: list[FunctionToolParam] = []
         self.tools_list: dict[str, BaseTool] = {f.name: f for f in funcs}
-        self.checkpointer = SqliteSaver(conn)
 
         for t in funcs:
             openai_schema = convert_to_openai_function(t)
@@ -191,7 +214,7 @@ class Agent:
             )
 
             try:
-                memory_collection.add(
+                self.memory_collection.add(
                     documents=[assistant_text],
                     metadatas=[{"user_query": user_text, "role": "assistant"}],
                     ids=[doc_id],
@@ -217,10 +240,10 @@ class Agent:
             ]
         }
 
-    @limits(calls=10, period=60)  # type: ignore[untyped-decorator]  # ratelimit decorator is untyped
+    @limits(calls=10, period=60)  # type: ignore[untyped-decorator]
     def execute(self, state: AgentState) -> Stream[ResponseStreamEvent]:
         """Excute the prompt with the message given in the state"""
-        completion = client.responses.create(
+        completion = self.client.responses.create(
             model="gpt-4o",
             temperature=0,
             input=cast(ResponseInputParam, state["messages"]),
