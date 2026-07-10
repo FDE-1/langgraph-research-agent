@@ -1,0 +1,13 @@
+# Line endings are a property of the repo, not of whoever cloned it.
+#
+# Without this, `git status` disagrees with itself across shells: a bash spawned by
+# make gets HOME=/home/<user>, never reads the global .gitconfig, so core.autocrlf is
+# unset — and every CRLF working file reads as modified against its LF blob. init.sh
+# then aborts on a "dirty" tree that is perfectly clean.
+* text=auto
+
+# Executed by bash; CRLF here means `bad interpreter: /usr/bin/env bash^M`.
+*.sh text eol=lf
+
+# Tabs are significant, and cmd.exe never reads it.
+Makefile text eol=lf
