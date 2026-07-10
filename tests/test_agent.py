@@ -1,13 +1,14 @@
 import uuid
-import pytest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from pytest import MonkeyPatch
+
+import pytest
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
+from pytest import MonkeyPatch
 
 from langgraph_research_agent.agent import Agent
 from langgraph_research_agent.utils.state import AgentState
-from langchain_core.tools import tool
 
 fake_text = SimpleNamespace(type="response.output_text.delta", delta="Bonjour")
 fake_done = SimpleNamespace(type="response.completed")
@@ -42,15 +43,15 @@ def test_agent_initialization() -> None:
 def test_agent_run(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
     agent = Agent(funcs=[dummy_weather])
 
-    def fake_execute(State: AgentState) -> list[SimpleNamespace]:
+    def fake_execute(state: AgentState) -> list[SimpleNamespace]:
         return [fake_text, fake_item_done, fake_done]
 
     monkeypatch.setattr(agent, "execute", fake_execute)
 
-    user = {"role": "user", "content": "Salut"}
-    system = {"role": "system", "content": "nothing"}
-    messages = [system, user]
-    initial_state: AgentState = {"messages": messages, "turn": 0}
+    user: dict[str, object] = {"role": "user", "content": "Salut"}
+    system: dict[str, object] = {"role": "system", "content": "nothing"}
+    messages: list[dict[str, object]] = [system, user]
+    initial_state: AgentState = {"messages": messages, "turn": 0, "pending_calls": []}
     config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     final_state = agent.graph.invoke(initial_state, config)
@@ -81,10 +82,10 @@ def test_agent_run2(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
     fake = MagicMock(side_effect=[stream_tour1, stream_tour2])
     monkeypatch.setattr(agent, "execute", fake)
 
-    user = {"role": "user", "content": "Salut"}
-    system = {"role": "system", "content": "nothing"}
-    messages = [system, user]
-    initial_state: AgentState = {"messages": messages, "turn": 0}
+    user: dict[str, object] = {"role": "user", "content": "Salut"}
+    system: dict[str, object] = {"role": "system", "content": "nothing"}
+    messages: list[dict[str, object]] = [system, user]
+    initial_state: AgentState = {"messages": messages, "turn": 0, "pending_calls": []}
     config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     final_state = agent.graph.invoke(initial_state, config)

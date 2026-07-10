@@ -1,5 +1,15 @@
 import json
+import sqlite3
+import uuid
 from typing import cast
+
+import chromadb
+from chromadb.utils import embedding_functions
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_function
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, StateGraph
 from openai import OpenAI, Stream
 from openai.types.responses import (
     FunctionToolParam,
@@ -7,18 +17,10 @@ from openai.types.responses import (
     ResponseStreamEvent,
 )
 from ratelimit import limits
-from langgraph.graph import StateGraph, END
-from .utils.state import AgentState
-from langgraph.checkpoint.sqlite import SqliteSaver
-import sqlite3
-from langchain_core.runnables import RunnableConfig
+
 from .utils.logger import logger
-import uuid
-from chromadb.utils import embedding_functions
-from langchain_core.tools import BaseTool
-import chromadb
-from langchain_core.utils.function_calling import convert_to_openai_function
 from .utils.setting import client_path, collection_name, openapi_key
+from .utils.state import AgentState
 
 chroma_client = chromadb.PersistentClient(path=str(client_path))
 
@@ -186,7 +188,10 @@ class Agent:
             "messages": [
                 {
                     "role": "assistant",
-                    "content": f"Max number of turn {state['turn']} was reached try to make the question shorter",
+                    "content": (
+                        f"Max number of turn {state['turn']} was reached "
+                        "try to make the question shorter"
+                    ),
                 }
             ]
         }

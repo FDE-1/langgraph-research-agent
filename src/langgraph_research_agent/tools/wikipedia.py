@@ -1,8 +1,9 @@
+from typing import TypedDict
+
 import wikipediaapi
 from langchain_core.tools import StructuredTool, ToolException
 
 from ..utils.logger import logger
-from typing import TypedDict
 
 
 class WikipediaResponse(TypedDict):
@@ -25,9 +26,9 @@ def wikipedia_func(subject: str) -> WikipediaResponse:
         logger.info(f"Tool return: {result}")
         return {"success": result.exists(), "content": result.text}
     except wikipediaapi.WikipediaException as e:
-        raise ToolException(f"A wikipedia API error occured: {e}")
+        raise ToolException(f"A wikipedia API error occured: {e}") from e
     except Exception as e:
-        raise ToolException(f"An unexpected error occurred: {e}")
+        raise ToolException(f"An unexpected error occurred: {e}") from e
 
 
 wikipedia = StructuredTool.from_function(

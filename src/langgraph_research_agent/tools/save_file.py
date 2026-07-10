@@ -1,4 +1,5 @@
 from langchain_core.tools import StructuredTool, ToolException
+
 from ..utils.logger import logger
 from ..utils.setting import workspace
 
@@ -19,14 +20,14 @@ def save_file_func(path: str, content: str) -> str:
                 f.write(content)
                 return "Content successfully written"
         return "Not accessible"
-    except FileNotFoundError:
-        raise ToolException("The file was not found")
-    except PermissionError:
-        raise ToolException("Permission error")
-    except IsADirectoryError:
-        raise ToolException("Not a valid directory")
+    except FileNotFoundError as e:
+        raise ToolException("The file was not found") from e
+    except PermissionError as e:
+        raise ToolException("Permission error") from e
+    except IsADirectoryError as e:
+        raise ToolException("Not a valid directory") from e
     except Exception as e:
-        raise ToolException(f"An unexpected error occurred: {e}")
+        raise ToolException(f"An unexpected error occurred: {e}") from e
 
 
 save_file = StructuredTool.from_function(

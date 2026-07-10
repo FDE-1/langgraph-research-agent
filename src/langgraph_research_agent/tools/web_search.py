@@ -1,9 +1,10 @@
-from langchain_core.tools import StructuredTool, ToolException, InjectedToolArg
+from typing import Annotated, cast
+
+from langchain_core.tools import InjectedToolArg, StructuredTool, ToolException
+from tavily import TavilyClient
+from tavily.errors import InvalidAPIKeyError, TimeoutError, UsageLimitExceededError
 
 from ..utils.logger import logger
-from tavily import TavilyClient
-from tavily.errors import InvalidAPIKeyError, UsageLimitExceededError, TimeoutError
-from typing import Annotated, cast
 
 
 def web_search_func(
@@ -17,14 +18,14 @@ def web_search_func(
         result = client.search(query, max_results=max_result)
         logger.info(f"Tool return: {result}")
         return cast(dict[str, object], result)
-    except InvalidAPIKeyError:
-        raise ToolException("Invalid API Key")
-    except UsageLimitExceededError:
-        raise ToolException("Out of credits")
-    except TimeoutError:
-        raise ToolException("Search took too long")
+    except InvalidAPIKeyError as e:
+        raise ToolException("Invalid API Key") from e
+    except UsageLimitExceededError as e:
+        raise ToolException("Out of credits") from e
+    except TimeoutError as e:
+        raise ToolException("Search took too long") from e
     except Exception as e:
-        raise ToolException(str(e))
+        raise ToolException(str(e)) from e
 
 
 web_search = StructuredTool.from_function(

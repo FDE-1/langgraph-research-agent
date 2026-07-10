@@ -25,15 +25,10 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
-    hooks:
-      - id: mypy
-        name: mypy (strict)
-        args: [--strict]
-        additional_dependencies:
-          [beartype, pytest, pytest-mock, pydantic, pydantic-settings, loguru]
-
+  # mypy must run from the project venv, not an isolated pre-commit env: resolving
+  # langchain/langgraph/chromadb/openai types requires those packages installed.
+  # pass_filenames: false so it always checks the whole package — a partial file
+  # list hides cross-module errors.
   - repo: local
     hooks:
       - id: mypy

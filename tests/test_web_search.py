@@ -1,17 +1,18 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from langchain_core.tools.base import ToolException
-from tavily.errors import InvalidAPIKeyError, UsageLimitExceededError, TimeoutError
+from tavily.errors import InvalidAPIKeyError, TimeoutError, UsageLimitExceededError
 
 from langgraph_research_agent.tools.web_search import web_search_func
 
 
 @pytest.fixture
-def mock_client():
+def mock_client() -> MagicMock:
     return MagicMock()
 
 
-def test_web_search_success(mock_client):
+def test_web_search_success(mock_client: MagicMock) -> None:
     expected_response = {"results": [{"title": "Titre", "content": "Contenu mocké"}]}
     mock_client.search.return_value = expected_response
 
@@ -21,7 +22,7 @@ def test_web_search_success(mock_client):
     mock_client.search.assert_called_once_with("Météo Paris", max_results=3)
 
 
-def test_web_search_exceptions(mock_client):
+def test_web_search_exceptions(mock_client: MagicMock) -> None:
     mock_client.search.side_effect = InvalidAPIKeyError("Mauvaise clé")
     with pytest.raises(ToolException, match="Invalid API Key"):
         web_search_func(client=mock_client, query="Test")
