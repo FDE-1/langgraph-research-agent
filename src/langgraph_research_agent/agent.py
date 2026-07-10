@@ -89,8 +89,6 @@ class Agent:
 
         graph.set_entry_point("reason")
         self.graph = graph.compile(checkpointer=self.checkpointer)
-        result = self.graph.get_graph().draw_mermaid()
-        print(result)
 
     def is_type_function_call_(self, state: AgentState) -> bool:
         """Check if there is a need to call a function"""
@@ -222,3 +220,8 @@ class Agent:
         initial_state: AgentState = {"messages": messages, "turn": 0, "pending_calls": []}
         final_state = self.graph.invoke(initial_state, config)
         return cast(str, final_state["messages"][-1]["content"])
+
+    def draw(self) -> None:
+        """Return the drawing of the graph."""
+        result = self.graph.get_graph().draw_mermaid()
+        print(result)
