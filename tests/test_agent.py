@@ -14,10 +14,13 @@ fake_done = SimpleNamespace(type="response.completed")
 fake_item_done = SimpleNamespace(
     type="response.output_item.done", item=SimpleNamespace(type="message")
 )
+
+
 @tool
 def dummy_weather(query: str) -> str:
     """Dummy weather"""
     return f"Météo pour {query}: Ensoleillé"
+
 
 @pytest.fixture(autouse=True)
 def mock_chroma(monkeypatch: MonkeyPatch) -> MagicMock:
@@ -43,27 +46,21 @@ def test_agent_run(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
         return [fake_text, fake_item_done, fake_done]
 
     monkeypatch.setattr(agent, "execute", fake_execute)
-    
-    user = {
-        "role": "user",
-        "content": "Salut"
-    }
-    system = {
-        "role": "system",
-        "content": "nothing"
-    }
+
+    user = {"role": "user", "content": "Salut"}
+    system = {"role": "system", "content": "nothing"}
     messages = [system, user]
     initial_state: AgentState = {"messages": messages, "turn": 0}
-    config: RunnableConfig  = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
     final_state = agent.graph.invoke(initial_state, config)
-    
-    assert final_state["messages"][-1]["content"] == "Bonjour" 
-    
+
+    assert final_state["messages"][-1]["content"] == "Bonjour"
+
     mock_chroma.assert_called_once()
     kwargs = mock_chroma.call_args.kwargs
-    assert kwargs["documents"] == ["Bonjour"] 
-    assert kwargs["metadatas"][0]["user_query"] == "Salut" 
+    assert kwargs["documents"] == ["Bonjour"]
+    assert kwargs["metadatas"][0]["user_query"] == "Salut"
 
 
 fake_tool_call = SimpleNamespace(
@@ -84,26 +81,20 @@ def test_agent_run2(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
     fake = MagicMock(side_effect=[stream_tour1, stream_tour2])
     monkeypatch.setattr(agent, "execute", fake)
 
-    user = {
-        "role": "user",
-        "content": "Salut"
-    }
-    system = {
-        "role": "system",
-        "content": "nothing"
-    }
+    user = {"role": "user", "content": "Salut"}
+    system = {"role": "system", "content": "nothing"}
     messages = [system, user]
     initial_state: AgentState = {"messages": messages, "turn": 0}
-    config: RunnableConfig  = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
     final_state = agent.graph.invoke(initial_state, config)
-    
-    assert final_state["messages"][-1]["content"] == "Bonjour" 
+
+    assert final_state["messages"][-1]["content"] == "Bonjour"
     assert any(
         isinstance(m, dict) and m.get("type") == "function_call_output"
         for m in final_state["messages"]
     )
-    
+
     mock_chroma.assert_called_once()
     assert mock_chroma.call_args.kwargs["documents"] == ["Bonjour"]
 
@@ -117,13 +108,13 @@ def test_agent_run3(monkeypatch: MonkeyPatch, mock_chroma: MagicMock) -> None:
 
     agent.run("Salut", 1)
     agent.run("Ca va?", 1)
-    
-    config: RunnableConfig  = {"configurable": {"thread_id": "1"}}
+
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
     state = agent.graph.get_state(config)
     messages = state.values["messages"]
     contents = [m.get("content") for m in messages]
-    
-    assert "Salut" in contents      
-    assert "Ca va?" in contents     
-    
+
+    assert "Salut" in contents
+    assert "Ca va?" in contents
+
     assert mock_chroma.call_count == 2
