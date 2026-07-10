@@ -11,3 +11,10 @@ htmlcov/
 .mypy_cache/
 
 .env
+
+# Runtime state, rebuilt on demand: LangGraph thread checkpoints and the Chroma
+# vector store. `workspace/` is also where the save_file tool writes agent output,
+# so keep the directory itself (see .gitkeep) — the tool does not mkdir it.
+checkpoint.sqlite
+workspace/*
+!workspace/.gitkeep
