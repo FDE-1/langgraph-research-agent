@@ -17,6 +17,7 @@ from langgraph_research_agent.tools.search_memory import search_memory
 
 console = Console()
 
+
 def init_agent() -> Agent:
     """Init the different agent"""
     tavily_client = TavilyClient()
@@ -33,19 +34,18 @@ def init_agent() -> Agent:
         handle_tool_error=True,
     )
 
-    tools: list[BaseTool] = [
-        web_search,
-        calculator,
-        save_file,
-        wikipedia,
-        search_memory
-    ]
-    
+    tools: list[BaseTool] = [web_search, calculator, save_file, wikipedia, search_memory]
+
     return Agent(funcs=tools)
 
+
 def main() -> None:
-    welcome_message = Text("Welcome to the agent of langgraph research 🧠\n", justify="center", style="bold blue")
-    welcome_message.append("Write your question here. Write 'quit' or 'exit' to exit.", style="italic cyan")
+    welcome_message = Text(
+        "Welcome to the agent of langgraph research 🧠\n", justify="center", style="bold blue"
+    )
+    welcome_message.append(
+        "Write your question here. Write 'quit' or 'exit' to exit.", style="italic cyan"
+    )
     console.print(Panel(welcome_message, border_style="blue", title="LangGraph Agent"))
 
     try:
@@ -59,29 +59,34 @@ def main() -> None:
     while True:
         try:
             user_input = Prompt.ask("\n[bold green]You[/bold green]")
-            
+
             if user_input.lower() in ["quit", "exit", "/quit", "/exit", "q"]:
                 console.print("\n[bold blue]Goodbye ![/bold blue] 👋")
                 break
-                
+
             if not user_input.strip():
                 continue
 
-            with console.status("[bold magenta]Agent is thinking...[/bold magenta]", spinner="dots"):
+            with console.status(
+                "[bold magenta]Agent is thinking...[/bold magenta]", spinner="dots"
+            ):
                 response = agent.run(user_input, thread_id=session_id)
-            
-            console.print(Panel(
-                Markdown(response), 
-                title="[bold magenta]Assistant[/bold magenta]", 
-                border_style="magenta",
-                padding=(1, 2)
-            ))
+
+            console.print(
+                Panel(
+                    Markdown(response),
+                    title="[bold magenta]Assistant[/bold magenta]",
+                    border_style="magenta",
+                    padding=(1, 2),
+                )
+            )
 
         except KeyboardInterrupt:
             console.print("\n[bold red]Interruption by the user. Goodbye ![/bold red] 👋")
             break
         except Exception as e:
             console.print(f"\n[bold red]An error occured in the execution :[/bold red] {e}")
+
 
 if __name__ == "__main__":
     main()
