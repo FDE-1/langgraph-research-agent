@@ -9,9 +9,9 @@ def calculator_func(a: str) -> int | float | bool | str:
     Use if you have an expression you need to calculate. Do not use
     it for search or research."""
     try:
-        logger.info(f"Tool usage: calculator with following arguments {a}")
+        logger.info(f"input: {a}")
         result: int = simpleeval.simple_eval(a)
-        logger.info(f"Tool return: {result}")
+        logger.info(f"result: {result}")
         return result
     except ZeroDivisionError as e:
         raise ToolException("Math Error: You cannot divide by zero.") from e

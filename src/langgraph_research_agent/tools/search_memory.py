@@ -15,13 +15,10 @@ def search_memory_func(query: str, nb_results: int = 5) -> list[str]:
     try:
         client = chromadb.PersistentClient(path=settings.client_path)
         collection = client.get_collection(name=settings.collection_name)
-        logger.info(
-            "Tool usage: search_memory with following arguments "
-            f"query={query} and nb_results={nb_results}"
-        )
+        logger.info(f"query: {query} (n={nb_results})")
         results = collection.query(query_texts=[query], n_results=nb_results)
         documents = results["documents"]
-        logger.debug(f"[search_memory] documents={documents}")
+        logger.debug(f"documents={documents}")
         if not documents:
             return []
         return documents[0]

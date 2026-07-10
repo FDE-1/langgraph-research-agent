@@ -14,9 +14,9 @@ def web_search_func(
     Use when you have to search on a general subject.
     Do not use for specific search and calculator."""
     try:
-        logger.info(f"Tool usage: web_search with following arguments {query}")
+        logger.info(f"query: {query}")
         result = client.search(query, max_results=max_result)
-        logger.info(f"Tool return: {result}")
+        logger.debug(f"result: {result}")
         return cast(dict[str, object], result)
     except InvalidAPIKeyError as e:
         raise ToolException("Invalid API Key") from e

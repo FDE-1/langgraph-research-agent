@@ -130,8 +130,8 @@ class Agent:
     def _reason(self, state: AgentState) -> dict[str, object]:
         """Node of reason"""
         turn = state.get("turn", 0)
-        logger.info(f"--- [Turn {turn}] Agent is Reasoning ---")
-        logger.debug(f"[reason] state.turn={turn} state.messages={state['messages']}")
+        logger.info(f"turn {turn}: reasoning")
+        logger.debug(f"state.turn={turn} state.messages={state['messages']}")
         stream = self.execute(state)
         text = ""
         pending_calls = []
@@ -140,9 +140,9 @@ class Agent:
                 text += event.delta
             elif event.type == "response.output_item.done":
                 if event.item.type == "function_call":
-                    logger.info(f"[Choice] Agent choose to use tools : {event.item.name}")
+                    logger.info(f"chose tool: {event.item.name}")
                     logger.debug(
-                        f"[reason] tool_call name={event.item.name} "
+                        f"tool_call name={event.item.name} "
                         f"call_id={event.item.call_id} arguments={event.item.arguments}"
                     )
                     pending_calls.append(
@@ -154,25 +154,25 @@ class Agent:
                         }
                     )
         if text:
-            logger.info("[Choice] Agent choose to respond")
-            logger.debug(f"[reason] answer={text!r}")
+            logger.info("chose to answer")
+            logger.debug(f"answer={text!r}")
             return {"messages": [{"role": "assistant", "content": text}], "pending_calls": []}
         else:
-            logger.debug(f"[reason] pending_calls={pending_calls}")
+            logger.debug(f"pending_calls={pending_calls}")
             return {"messages": pending_calls, "pending_calls": pending_calls}
 
     def _action(self, state: AgentState) -> dict[str, object]:
         """Node of action that call all pending_calls to function"""
         result = []
-        logger.debug(f"[action] pending_calls={state['pending_calls']}")
+        logger.debug(f"pending_calls={state['pending_calls']}")
         for pending_call in state["pending_calls"]:
             event = pending_call
             name = cast(str, event["name"])
-            logger.info(f"---  Action : going to {name} ---")
+            logger.info(f"calling tool: {name}")
             args = json.loads(cast(str, event["arguments"]))
-            logger.debug(f"[action] invoking {name} with args={args}")
+            logger.debug(f"invoking {name} with args={args}")
             output = self.tools_list[name].invoke(args)
-            logger.debug(f"[action] {name} returned {output!r}")
+            logger.debug(f"{name} returned {output!r}")
             result.append(
                 {
                     "type": "function_call_output",
@@ -184,17 +184,15 @@ class Agent:
 
     def _observe(self, state: AgentState) -> dict[str, object]:
         """Node that observe the result"""
-        logger.info("--- Observation : End of current turn ---")
-        logger.debug(
-            f"[observe] turn {state['turn']} -> {state['turn'] + 1} (max_turn={self.max_turn})"
-        )
+        logger.info("turn complete")
+        logger.debug(f"turn {state['turn']} -> {state['turn'] + 1} (max_turn={self.max_turn})")
         return {"turn": state["turn"] + 1}
 
     def _embed(self, state: AgentState) -> dict[str, object]:
         """Node that embeded the response"""
-        logger.info("--- Embeding : Saving in memory ---")
+        logger.info("saving answer to memory")
         if self.is_max_turn(state):
-            logger.info("--- Embeding : Max turn reach no save in memory ---")
+            logger.info("turn budget exhausted, skipping memory save")
             return {}
         messages = state["messages"]
         last_message = messages[-1]
@@ -209,9 +207,7 @@ class Agent:
                     break
 
             doc_id = str(uuid.uuid4())
-            logger.debug(
-                f"[embed] doc_id={doc_id} user_query={user_text!r} document={assistant_text!r}"
-            )
+            logger.debug(f"doc_id={doc_id} user_query={user_text!r} document={assistant_text!r}")
 
             try:
                 self.memory_collection.add(
@@ -219,15 +215,15 @@ class Agent:
                     metadatas=[{"user_query": user_text, "role": "assistant"}],
                     ids=[doc_id],
                 )
-                logger.info(f"Memory saved to Chroma (ID: {doc_id})")
+                logger.info(f"memory saved (id={doc_id})")
 
             except Exception as e:
-                logger.error(f"Error when embeding and saving : {e}")
+                logger.error(f"memory save failed: {e}")
 
         return {}
 
     def _max_turn(self, state: AgentState) -> dict[str, object]:
-        logger.debug(f"[max_turn] budget exhausted at turn={state['turn']}")
+        logger.debug(f"budget exhausted at turn={state['turn']}")
         return {
             "messages": [
                 {
@@ -264,13 +260,12 @@ class Agent:
         else:
             messages = [user]
         initial_state: AgentState = {"messages": messages, "turn": 0, "pending_calls": []}
-        logger.debug(f"[run] thread_id={thread_id} resumed={existing is not None}")
-        logger.debug(f"[run] initial_state={initial_state}")
+        logger.debug(f"thread_id={thread_id} resumed={existing is not None}")
+        logger.debug(f"initial_state={initial_state}")
         final_state = self.graph.invoke(initial_state, config)
-        logger.debug(f"[run] final turn={final_state['turn']} messages={final_state['messages']}")
+        logger.debug(f"final turn={final_state['turn']} messages={final_state['messages']}")
         return cast(str, final_state["messages"][-1]["content"])
 
-    def draw(self) -> None:
-        """Return the drawing of the graph."""
-        result = self.graph.get_graph().draw_mermaid()
-        print(result)
+    def draw(self) -> str:
+        """Return the graph as a mermaid diagram."""
+        return self.graph.get_graph().draw_mermaid()

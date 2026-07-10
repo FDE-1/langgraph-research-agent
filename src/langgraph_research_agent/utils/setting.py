@@ -16,6 +16,7 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
 
     app_name: str = "langgraph-research-agent"
     debug: bool = False
+    log_json: bool = False
     openai_api_key: str | None = None
     tavily_api_key: str | None = None
     client_path: str = "workspace/chroma"

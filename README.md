@@ -166,20 +166,26 @@ print(agent.run("What is 12 * (3 + 4)?", thread_id=1))
 
 Reusing the same `thread_id` resumes the conversation from its SQLite checkpoint; the system prompt is only sent on the first turn of a thread.
 
-`Agent.draw()` prints the compiled graph as a mermaid diagram.
+`Agent.draw()` returns the compiled graph as a mermaid diagram: `print(agent.draw())`.
 
 ---
 
-## Debugging
+## Logging
 
-Set `debug=true` in `.env`. The logger switches from the JSON sink at `INFO` to a colourised human-readable sink at `DEBUG`, and every node logs its values — incoming state, tool arguments and return values, turn transitions, and the document written to memory:
+Logs go to stderr, colourised and one line each:
 
 ```
-DEBUG | agent:_action  - [action] invoking calculator with args={'a': '6*7'}
-DEBUG | agent:_action  - [action] calculator returned 42
-DEBUG | agent:_observe - [observe] turn 0 -> 1 (max_turn=5)
-DEBUG | agent:_embed   - [embed] doc_id=a311d599… user_query='what is 6*7?' document='42'
+15:27:45 INFO  agent:_reason              turn 0: reasoning
+15:27:45 INFO  agent:_reason              chose tool: calculator
+15:27:45 INFO  calculator:calculator_func input: 6*7
+15:27:45 INFO  calculator:calculator_func result: 42
+15:27:45 INFO  agent:_observe             turn complete
+15:27:45 INFO  agent:_embed               memory saved (id=e537f3df…)
 ```
+
+Set `debug=true` in `.env` to add millisecond timestamps, source line numbers, and a `DEBUG` line per node carrying its values — incoming state, tool arguments and return values, turn transitions, and the document written to memory.
+
+Set `log_json=true` for the serialised loguru sink, one JSON object per record. Useful for a log shipper, unreadable at a terminal.
 
 ---
 

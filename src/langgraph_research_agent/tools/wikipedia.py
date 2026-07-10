@@ -16,14 +16,14 @@ def wikipedia_func(subject: str) -> WikipediaResponse:
     Use when you have to search on the wikipedia on a specific subject.
     Do not use for general search and calculator."""
     try:
-        logger.info(f"Tool usage: wikipedia with following arguments {subject}")
+        logger.info(f"subject: {subject}")
         wiki_wiki = wikipediaapi.Wikipedia(
             user_agent="MyProjectName (merlin@example.com)",
             language="en",
             extract_format=wikipediaapi.ExtractFormat.WIKI,
         )
         result = wiki_wiki.page(subject)
-        logger.info(f"Tool return: {result}")
+        logger.debug(f"page: {result}")
         return {"success": result.exists(), "content": result.text}
     except wikipediaapi.WikipediaException as e:
         raise ToolException(f"A wikipedia API error occured: {e}") from e

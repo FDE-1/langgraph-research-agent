@@ -11,11 +11,9 @@ def save_file_func(path: str, content: str) -> str:
     Use when you want to save a file for persistance.
     Do not use for search or calculate."""
     try:
-        logger.info(
-            f"Tool usage: save_file with following arguments path={path} and content={content}"
-        )
+        logger.info(f"path: {path} ({len(content)} chars)")
         file_to_get = (settings.workspace / path).resolve()
-        logger.debug(f"[save_file] workspace={settings.workspace} resolved={file_to_get}")
+        logger.debug(f"workspace={settings.workspace} resolved={file_to_get}")
         if file_to_get.is_relative_to(settings.workspace):
             if file_to_get.is_dir():
                 raise IsADirectoryError()
