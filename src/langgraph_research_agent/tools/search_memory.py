@@ -2,7 +2,9 @@ import chromadb
 from langchain_core.tools import StructuredTool, ToolException
 
 from ..utils.logger import logger
-from ..utils.setting import client_path, collection_name
+from ..utils.setting import get_settings
+
+settings = get_settings()
 
 
 def search_memory_func(query: str, nb_results: int = 5) -> list[str]:
@@ -11,14 +13,15 @@ def search_memory_func(query: str, nb_results: int = 5) -> list[str]:
     Do not use for calculation or to search the web.
     """
     try:
-        client = chromadb.PersistentClient(path=client_path)
-        collection = client.get_collection(name=collection_name)
+        client = chromadb.PersistentClient(path=settings.client_path)
+        collection = client.get_collection(name=settings.collection_name)
         logger.info(
             "Tool usage: search_memory with following arguments "
             f"query={query} and nb_results={nb_results}"
         )
         results = collection.query(query_texts=[query], n_results=nb_results)
         documents = results["documents"]
+        logger.debug(f"[search_memory] documents={documents}")
         if not documents:
             return []
         return documents[0]

@@ -14,13 +14,15 @@ from langgraph_research_agent.tools.save_file import save_file
 from langgraph_research_agent.tools.search_memory import search_memory
 from langgraph_research_agent.tools.web_search import web_search_func
 from langgraph_research_agent.tools.wikipedia import wikipedia
+from langgraph_research_agent.utils.setting import get_settings
 
 console = Console()
+settings = get_settings()
 
 
 def init_agent() -> Agent:
     """Init the different agent"""
-    tavily_client = TavilyClient()
+    tavily_client = TavilyClient(api_key=settings.tavily_api_key)
 
     def web_search_bound(query: str, max_result: int = 5) -> dict[str, object]:
         """Search the web via Tavily and return a dict.

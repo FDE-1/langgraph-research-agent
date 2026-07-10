@@ -1,7 +1,9 @@
 from langchain_core.tools import StructuredTool, ToolException
 
 from ..utils.logger import logger
-from ..utils.setting import workspace
+from ..utils.setting import get_settings
+
+settings = get_settings()
 
 
 def save_file_func(path: str, content: str) -> str:
@@ -12,8 +14,9 @@ def save_file_func(path: str, content: str) -> str:
         logger.info(
             f"Tool usage: save_file with following arguments path={path} and content={content}"
         )
-        file_to_get = (workspace / path).resolve()
-        if file_to_get.is_relative_to(workspace):
+        file_to_get = (settings.workspace / path).resolve()
+        logger.debug(f"[save_file] workspace={settings.workspace} resolved={file_to_get}")
+        if file_to_get.is_relative_to(settings.workspace):
             if file_to_get.is_dir():
                 raise IsADirectoryError()
             with open(file_to_get, "w") as f:

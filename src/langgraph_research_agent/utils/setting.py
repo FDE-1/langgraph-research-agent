@@ -1,11 +1,35 @@
-import os
+from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
 
-client_path = Path(os.getenv("client_path") or "workspace/chroma")
-collection_name = os.getenv("collection_name") or "agent_memory"
-openapi_key = os.getenv("OPENAI_API_KEY")
-workspace = Path(os.getenv("workspace") or "workspace").resolve()
+class Settings(BaseSettings):  # type: ignore[explicit-any]
+    """Application settings read from the environment and .env."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_name: str = "langgraph-research-agent"
+    debug: bool = False
+    openai_api_key: str | None = None
+    tavily_api_key: str | None = None
+    client_path: str = "workspace/chroma"
+    collection_name: str = "agent_memory"
+    workspace: Path = Path("workspace")
+
+    @field_validator("workspace")
+    @classmethod
+    def _resolve_workspace(cls, value: Path) -> Path:
+        """save_file compares against this with is_relative_to; both sides must be absolute."""
+        return value.resolve()
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return the settings"""
+    return Settings()

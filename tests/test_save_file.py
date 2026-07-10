@@ -10,7 +10,7 @@ from langgraph_research_agent.tools.save_file import save_file, save_file_func
 
 @pytest.fixture
 def mock_workspace(tmp_path: Path) -> Iterator[Path]:
-    with patch("langgraph_research_agent.tools.save_file.workspace", new=tmp_path):
+    with patch("langgraph_research_agent.tools.save_file.settings.workspace", new=tmp_path):
         yield tmp_path
 
 

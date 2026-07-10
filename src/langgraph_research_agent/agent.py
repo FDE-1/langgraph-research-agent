@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import uuid
 from typing import cast
@@ -19,22 +20,27 @@ from openai.types.responses import (
 from ratelimit import limits
 
 from .utils.logger import logger
-from .utils.setting import client_path, collection_name, openapi_key
+from .utils.setting import get_settings
 from .utils.state import AgentState
 
-chroma_client = chromadb.PersistentClient(path=str(client_path))
+settings = get_settings()
+
+chroma_client = chromadb.PersistentClient(path=settings.client_path)
+
+if settings.openai_api_key:
+    os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
 
 openai_ef = embedding_functions.OpenAIEmbeddingFunction(
     api_key_env_var="OPENAI_API_KEY", model_name="text-embedding-3-small"
 )
 
 memory_collection = chroma_client.get_or_create_collection(
-    name=collection_name,
+    name=settings.collection_name,
     embedding_function=openai_ef,  # type: ignore[arg-type]  # chroma's own EF, stub generic mismatch
 )
 conn = sqlite3.connect("checkpoint.sqlite", check_same_thread=False)
 
-client = OpenAI(api_key=openapi_key)
+client = OpenAI(api_key=settings.openai_api_key)
 
 prompt = """ Tu es un assistant qui répond aux questions.\n
 Tu as accès à des outils, utilise-les quand c'est pertinent.\n
@@ -102,6 +108,7 @@ class Agent:
         """Node of reason"""
         turn = state.get("turn", 0)
         logger.info(f"--- [Turn {turn}] Agent is Reasoning ---")
+        logger.debug(f"[reason] state.turn={turn} state.messages={state['messages']}")
         stream = self.execute(state)
         text = ""
         pending_calls = []
@@ -111,6 +118,10 @@ class Agent:
             elif event.type == "response.output_item.done":
                 if event.item.type == "function_call":
                     logger.info(f"[Choice] Agent choose to use tools : {event.item.name}")
+                    logger.debug(
+                        f"[reason] tool_call name={event.item.name} "
+                        f"call_id={event.item.call_id} arguments={event.item.arguments}"
+                    )
                     pending_calls.append(
                         {
                             "type": "function_call",
@@ -121,19 +132,24 @@ class Agent:
                     )
         if text:
             logger.info("[Choice] Agent choose to respond")
+            logger.debug(f"[reason] answer={text!r}")
             return {"messages": [{"role": "assistant", "content": text}], "pending_calls": []}
         else:
+            logger.debug(f"[reason] pending_calls={pending_calls}")
             return {"messages": pending_calls, "pending_calls": pending_calls}
 
     def _action(self, state: AgentState) -> dict[str, object]:
         """Node of action that call all pending_calls to function"""
         result = []
+        logger.debug(f"[action] pending_calls={state['pending_calls']}")
         for pending_call in state["pending_calls"]:
             event = pending_call
             name = cast(str, event["name"])
             logger.info(f"---  Action : going to {name} ---")
             args = json.loads(cast(str, event["arguments"]))
+            logger.debug(f"[action] invoking {name} with args={args}")
             output = self.tools_list[name].invoke(args)
+            logger.debug(f"[action] {name} returned {output!r}")
             result.append(
                 {
                     "type": "function_call_output",
@@ -146,6 +162,9 @@ class Agent:
     def _observe(self, state: AgentState) -> dict[str, object]:
         """Node that observe the result"""
         logger.info("--- Observation : End of current turn ---")
+        logger.debug(
+            f"[observe] turn {state['turn']} -> {state['turn'] + 1} (max_turn={self.max_turn})"
+        )
         return {"turn": state["turn"] + 1}
 
     def _embed(self, state: AgentState) -> dict[str, object]:
@@ -167,6 +186,9 @@ class Agent:
                     break
 
             doc_id = str(uuid.uuid4())
+            logger.debug(
+                f"[embed] doc_id={doc_id} user_query={user_text!r} document={assistant_text!r}"
+            )
 
             try:
                 memory_collection.add(
@@ -182,6 +204,7 @@ class Agent:
         return {}
 
     def _max_turn(self, state: AgentState) -> dict[str, object]:
+        logger.debug(f"[max_turn] budget exhausted at turn={state['turn']}")
         return {
             "messages": [
                 {
@@ -218,7 +241,10 @@ class Agent:
         else:
             messages = [user]
         initial_state: AgentState = {"messages": messages, "turn": 0, "pending_calls": []}
+        logger.debug(f"[run] thread_id={thread_id} resumed={existing is not None}")
+        logger.debug(f"[run] initial_state={initial_state}")
         final_state = self.graph.invoke(initial_state, config)
+        logger.debug(f"[run] final turn={final_state['turn']} messages={final_state['messages']}")
         return cast(str, final_state["messages"][-1]["content"])
 
     def draw(self) -> None:
