@@ -11,6 +11,7 @@ htmlcov/
 .mypy_cache/
 
 .env
+livrable.zip
 
 # Runtime state, rebuilt on demand: LangGraph thread checkpoints and the Chroma
 # vector store. `workspace/` is also where the save_file tool writes agent output,

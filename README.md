@@ -6,19 +6,21 @@ A **ReAct-style research agent** built on [LangGraph](https://github.com/langcha
 
 ## Features
 
-- **ReAct loop** — reason → act → observe, repeated until the model answers.
-- **Tool calling** — the model decides which tool to invoke via OpenAI function calling.
-- **Persistent conversation** — LangGraph `SqliteSaver` checkpoints keyed by `thread_id`.
+- **ReAct loop** — reason → act → observe, repeated until the model answers or the turn budget runs out.
+- **Tool calling** — the model decides which tool to invoke via OpenAI function calling (`strict: true` schemas).
+- **Turn budget** — the loop is capped at `max_turn` reasoning turns (default `5`); on overrun the agent returns a "make the question shorter" message instead of looping forever.
+- **Persistent conversation** — LangGraph `SqliteSaver` checkpoints keyed by `thread_id`, stored in `checkpoint.sqlite`.
 - **Long-term memory** — each final answer is embedded (`text-embedding-3-small`) and stored in ChromaDB; retrievable later with the `search_memory` tool.
-- **Streaming** — responses stream from the OpenAI Responses API.
-- **Rate limiting** — max 10 model calls per 60 seconds.
+- **Rate limiting** — `execute` is capped at 10 model calls per 60 seconds. Note this *raises* `RateLimitException` on overrun rather than sleeping.
 - **Rich CLI** — interactive terminal chat with panels and spinners.
+
+The model is `gpt-4o` at `temperature=0`.
 
 ---
 
 ## Architecture
 
-The agent is a compiled LangGraph state machine. `reason` runs the model; if it emits a `function_call`, control routes to `action` → `observe` → back to `reason`. When the model answers instead of calling a tool, control routes to `embed` (save to memory) → `END`.
+The agent is a compiled LangGraph state machine. `reason` runs the model; if it emits a `function_call`, control routes to `action` → `observe`. `observe` either loops back to `reason` or, once the turn budget is spent, diverts to `max_turn`. When the model answers instead of calling a tool, control routes straight to `embed` (save to memory) → `END`.
 
 ```mermaid
 ---
@@ -32,10 +34,13 @@ graph TD;
 	action(action)
 	observe(observe)
 	embed(embed)
+	max_turn(max_turn)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> reason;
 	action --> observe;
-	observe --> reason;
+	max_turn --> embed;
+	observe -. &nbsp;True&nbsp; .-> max_turn;
+	observe -. &nbsp;False&nbsp; .-> reason;
 	reason -. &nbsp;True&nbsp; .-> action;
 	reason -. &nbsp;False&nbsp; .-> embed;
 	embed --> __end__;
@@ -48,12 +53,20 @@ graph TD;
 
 | Node | Role |
 |------|------|
-| `reason` | Calls the model. Returns either a tool call or a final assistant message. |
-| `action` | Executes the chosen tool with the model's arguments. |
-| `observe` | Increments the turn counter and loops back to `reason`. |
-| `embed` | Embeds the final answer and saves it to ChromaDB. Terminal node. |
+| `reason` | Calls the model and drains the stream. Emits either `pending_calls` (tool calls) or a final assistant message. |
+| `action` | Executes every pending tool call and appends each `function_call_output`. |
+| `observe` | Increments the turn counter. |
+| `max_turn` | Appends a "turn budget exhausted" assistant message. Reached only when the cap is hit. |
+| `embed` | Embeds the final answer into ChromaDB, then terminates. Skips the save when arriving from `max_turn`. |
 
-The conditional edge out of `reason` is decided by `is_type_function_call_` — `True` if the last message is a `function_call`, else `False`.
+Two conditional edges drive the loop:
+
+- `is_type_function_call_` — out of `reason`. `True` when `state["pending_calls"]` is non-empty.
+- `is_max_turn` — out of `observe`. `True` when `state["turn"] >= max_turn`.
+
+### State
+
+`AgentState` ([utils/state.py](src/langgraph_research_agent/utils/state.py)) is a `TypedDict` with three keys: `messages` (reduced with `operator.add`, so node returns are appended rather than replacing), `turn`, and `pending_calls`.
 
 ---
 
@@ -67,6 +80,10 @@ The conditional edge out of `reason` is decided by `is_type_function_call_` — 
 | `save_file` | Writes content to a file inside the `workspace/` directory (path-traversal guarded). |
 | `search_memory` | Semantic search over past answers stored in ChromaDB. |
 
+Every tool raises `ToolException` on failure and is wrapped with `handle_tool_error=True`, so errors come back to the model as text rather than crashing the graph.
+
+`web_search_func` takes its `TavilyClient` as an injected first argument; [main.py](main.py) binds a client and wraps it into a `StructuredTool` before handing it to the agent.
+
 ---
 
 ## Project structure
@@ -74,19 +91,23 @@ The conditional edge out of `reason` is decided by `is_type_function_call_` — 
 ```
 langgraph-research-agent/
 ├── main.py                     # Rich CLI entry point
+├── Makefile                    # install / fix / lint / typecheck / test / all
 ├── src/langgraph_research_agent/
 │   ├── agent.py                # Agent class + LangGraph graph
 │   ├── py.typed                # PEP 561 marker
 │   ├── tools/                  # web_search, wikipedia, calculator, save_file, search_memory
 │   └── utils/
 │       ├── state.py            # AgentState TypedDict
+│       ├── setting.py          # env-backed config (paths, keys, collection name)
 │       ├── errors.py           # AgentError
-│       ├── logger.py           # loguru logger
-│       └── protocol.py         # (legacy)
+│       └── logger.py           # loguru logger
 ├── tests/                      # pytest suite
-├── workspace/                  # chroma store + save_file target
+├── scripts/                    # clean / dist / template scaffolding helpers
+├── .github/workflows/ci.yml    # ruff + mypy + pytest on 3.11 and 3.12
 └── pyproject.toml
 ```
+
+`workspace/` (the Chroma store and `save_file` target) and `checkpoint.sqlite` are runtime state and are git-ignored.
 
 ---
 
@@ -112,7 +133,9 @@ client_path=workspace/chroma # optional — ChromaDB path (default: workspace/ch
 workspace=workspace          # optional — save_file target dir (default: workspace)
 ```
 
-> `OPENAI_API_KEY` must be present (non-empty) even for tests, because the ChromaDB embedding function is built at import time.
+> `OPENAI_API_KEY` must be present (non-empty) even for tests, because the ChromaDB embedding function is built at import time. [tests/conftest.py](tests/conftest.py) sets a dummy value.
+
+> `checkpoint.sqlite` is opened relative to the current working directory, so run the agent from the repo root.
 
 ---
 
@@ -134,18 +157,37 @@ agent = Agent(funcs=[calculator])
 print(agent.run("What is 12 * (3 + 4)?", thread_id=1))
 ```
 
+Reusing the same `thread_id` resumes the conversation from its SQLite checkpoint; the system prompt is only sent on the first turn of a thread.
+
 ---
 
 ## Development
 
-Run tests (with coverage):
+```bash
+make all        # lint + typecheck + test
+make fix        # ruff check --fix + ruff format
+make lint       # ruff check + ruff format --check
+make typecheck  # mypy --strict
+make test       # pytest with coverage
+```
+
+Or directly:
 
 ```bash
 uv run pytest
+uv run mypy src/ tests/
+uv run ruff check src/ tests/
 ```
 
-Type check:
+mypy runs in `strict` mode with `disallow_any_explicit` and `warn_unreachable`. Pre-commit hooks (gitleaks, ruff, mypy) mirror CI:
 
 ```bash
-uv run mypy src tests
+uv run pre-commit install
+uv run pre-commit run --all-files
 ```
+
+---
+
+## License
+
+MIT.
